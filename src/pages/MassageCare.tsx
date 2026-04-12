@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Heart, Timer, Hand, Footprints, Music, AlertTriangle,
-  Play, Pause, RotateCcw, Volume2, ChevronDown, ChevronUp
+  Heart, Timer, Footprints, Music, AlertTriangle,
+  Play, Pause, RotateCcw, Volume2, ChevronDown, ChevronUp, Users
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,13 +12,12 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import WadAlHalalAvatar from "@/components/WadAlHalalAvatar";
 
-// Body pressure points data
-const PRESSURE_POINTS = [
-  { id: "shoulder", nameAr: "الكتفين", nameEn: "Shoulders", tipAr: "تدليك دائري بزيت السمسم لمدة 5 دقائق يخفف التوتر", tipEn: "Circular massage with sesame oil for 5 minutes relieves tension", x: 50, y: 18 },
-  { id: "lower-back", nameAr: "أسفل الظهر", nameEn: "Lower Back", tipAr: "ضغط متوسط مع زيت السمسم — يساعد في آلام الفقرات", tipEn: "Medium pressure with sesame oil — helps with spinal pain", x: 50, y: 42 },
-  { id: "hands", nameAr: "راحة اليد", nameEn: "Palm", tipAr: "نقطة LI4 بين الإبهام والسبابة — تخفف الصداع", tipEn: "Point LI4 between thumb and index — relieves headaches", x: 20, y: 45 },
-  { id: "knee", nameAr: "الركبة", nameEn: "Knee", tipAr: "تدليك حول الرضفة بالقرض — مفيد لالتهاب المفاصل", tipEn: "Massage around kneecap with Garad — good for arthritis", x: 40, y: 65 },
-  { id: "feet", nameAr: "باطن القدم", nameEn: "Sole of Foot", tipAr: "ضغط على نقطة KD1 — يحسن النوم والاسترخاء", tipEn: "Press KD1 point — improves sleep and relaxation", x: 55, y: 88 },
+// Geriatric care data
+const GERIATRIC_TIPS = [
+  { nameAr: "العناية بالبشرة", nameEn: "Skin Care", descAr: "رطّب بشرة المسن يومياً بزيت السمسم لمنع الجفاف والتشقق", descEn: "Moisturize elderly skin daily with sesame oil to prevent dryness", emoji: "🧴" },
+  { nameAr: "التغذية السليمة", nameEn: "Proper Nutrition", descAr: "قدّم وجبات صغيرة متكررة غنية بالبروتين والألياف", descEn: "Offer small frequent meals rich in protein and fiber", emoji: "🥗" },
+  { nameAr: "الحركة اليومية", nameEn: "Daily Movement", descAr: "شجّع المشي الخفيف 10-15 دقيقة يومياً لتحسين الدورة الدموية", descEn: "Encourage light walking 10-15 min daily to improve circulation", emoji: "🚶" },
+  { nameAr: "السلامة من السقوط", nameEn: "Fall Prevention", descAr: "أزل العوائق من الممرات وثبّت مقابض في الحمام", descEn: "Remove obstacles from hallways and install bathroom grab bars", emoji: "⚠️" },
 ];
 
 const STRETCHES = [
@@ -45,8 +44,8 @@ const MassageCare = () => {
   const [timeLeft, setTimeLeft] = useState(7200); // 2 hours in seconds
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Pressure point
-  const [selectedPoint, setSelectedPoint] = useState<string | null>(null);
+  // Geriatric
+  const [expandedGeriatric, setExpandedGeriatric] = useState<number | null>(null);
 
   // Stretches
   const [expandedStretch, setExpandedStretch] = useState<number | null>(null);
@@ -81,8 +80,6 @@ const MassageCare = () => {
 
   const resetTimer = () => { setTimerRunning(false); setTimeLeft(7200); };
 
-  const selectedPointData = PRESSURE_POINTS.find(p => p.id === selectedPoint);
-
   return (
     <div className="flex flex-col gap-4 pb-6">
       {/* Header */}
@@ -91,9 +88,9 @@ const MassageCare = () => {
           <Heart className="h-8 w-8 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-foreground">{isAr ? "التدليك والرعاية" : "Massage & Care"}</h1>
+          <h1 className="text-xl font-bold text-foreground">{isAr ? "الاهتمام والرعاية" : "Attention & Care"}</h1>
           <p className="text-sm text-muted-foreground">
-            {isAr ? "أدوات رعاية المرضى والعناية الذاتية للممرضين" : "Patient care & self-care tools for nurses"}
+            {isAr ? "أدوات الاهتمام والرعاية بالمرضى والعناية الذاتية للممرضين" : "Patient attention & self-care tools for nurses"}
           </p>
         </div>
       </div>
@@ -101,8 +98,8 @@ const MassageCare = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="timer" className="text-xs gap-1"><Timer className="h-3.5 w-3.5" />{isAr ? "تقليب" : "Timer"}</TabsTrigger>
-          <TabsTrigger value="acupressure" className="text-xs gap-1"><Hand className="h-3.5 w-3.5" />{isAr ? "ضغط" : "Press"}</TabsTrigger>
           <TabsTrigger value="stretches" className="text-xs gap-1"><RotateCcw className="h-3.5 w-3.5" />{isAr ? "تمارين" : "Stretch"}</TabsTrigger>
+          <TabsTrigger value="geriatric" className="text-xs gap-1"><Users className="h-3.5 w-3.5" />{isAr ? "مسنين" : "Elderly"}</TabsTrigger>
           <TabsTrigger value="footsoak" className="text-xs gap-1"><Footprints className="h-3.5 w-3.5" />{isAr ? "نقع" : "Soak"}</TabsTrigger>
           <TabsTrigger value="sounds" className="text-xs gap-1"><Music className="h-3.5 w-3.5" />{isAr ? "أصوات" : "Sounds"}</TabsTrigger>
         </TabsList>
@@ -155,73 +152,14 @@ const MassageCare = () => {
               <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
                 <WadAlHalalAvatar size={36} />
                 <p className="text-xs text-foreground">
-                  {isAr ? "💡 نصيحة ود الحلال: قلّب المريض كل ساعتين بالتناوب — يمين، ظهر، يسار. استخدم وسائد لدعم الوضعية." : "💡 Wad Al-Halal Tip: Rotate patient every 2h alternating — right, back, left. Use pillows for positioning support."}
+                  {isAr ? "💡 نصيحة ود الحلال: في قسم الاهتمام والرعاية — قلّب المريض كل ساعتين بالتناوب — يمين، ظهر، يسار. استخدم وسائد لدعم الوضعية." : "💡 Wad Al-Halal Tip: In Attention & Care — Rotate patient every 2h alternating — right, back, left. Use pillows for positioning support."}
                 </p>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Tab 2: Acupressure Map */}
-        <TabsContent value="acupressure" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Hand className="h-5 w-5 text-primary" />
-                {isAr ? "خريطة نقاط الضغط (Acupressure Map)" : "Acupressure Point Map"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                {isAr ? "اضغط على نقطة لعرض نصائح التدليك بزيت السمسم والقرض" : "Tap a point for massage tips with Sesame Oil & Garad"}
-              </p>
-
-              {/* Body silhouette with pressure points */}
-              <div className="relative aspect-[2/3] bg-muted/50 rounded-xl border mx-auto max-w-[280px]">
-                {/* Simple body outline using CSS */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-8xl opacity-20">🧍</div>
-                </div>
-                {PRESSURE_POINTS.map(point => (
-                  <button
-                    key={point.id}
-                    onClick={() => setSelectedPoint(selectedPoint === point.id ? null : point.id)}
-                    className={`absolute w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all ${
-                      selectedPoint === point.id
-                        ? "bg-primary text-primary-foreground border-primary scale-125 shadow-lg"
-                        : "bg-primary/20 text-primary border-primary/40 hover:scale-110"
-                    }`}
-                    style={{ left: `${point.x}%`, top: `${point.y}%`, transform: "translate(-50%, -50%)" }}
-                  >
-                    •
-                  </button>
-                ))}
-              </div>
-
-              {selectedPointData && (
-                <Card className="border-primary/30 bg-primary/5 animate-in fade-in-50">
-                  <CardContent className="p-4 space-y-2">
-                    <p className="font-semibold text-sm text-primary">
-                      📍 {isAr ? selectedPointData.nameAr : selectedPointData.nameEn}
-                    </p>
-                    <p className="text-sm text-foreground">
-                      {isAr ? selectedPointData.tipAr : selectedPointData.tipEn}
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
-                <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                <AlertDescription className="text-xs text-yellow-700 dark:text-yellow-300">
-                  {isAr ? "⚠️ تحذير طبي: تجنب التدليك القوي لمرضى هشاشة العظام وتخثر الدم. استشر الطبيب أولاً." : "⚠️ Medical Warning: Avoid strong massage for osteoporosis and blood clot patients. Consult doctor first."}
-                </AlertDescription>
-              </Alert>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Tab 3: Nursing Stretches */}
+        {/* Tab 2: Nursing Stretches */}
         <TabsContent value="stretches" className="space-y-4 mt-4">
           <Card>
             <CardHeader className="pb-3">
@@ -252,6 +190,47 @@ const MassageCare = () => {
                   </CardContent>
                 </Card>
               ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab 3: Geriatric Care Corner */}
+        <TabsContent value="geriatric" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                {isAr ? "ركن رعاية المسنين (Geriatric Care)" : "Geriatric Care Corner"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {isAr ? "نصائح أساسية للعناية بكبار السن في المنزل" : "Essential tips for home elderly care"}
+              </p>
+              {GERIATRIC_TIPS.map((tip, i) => (
+                <Card key={i} className="cursor-pointer" onClick={() => setExpandedGeriatric(expandedGeriatric === i ? null : i)}>
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{tip.emoji}</span>
+                        <p className="font-medium text-sm">{isAr ? tip.nameAr : tip.nameEn}</p>
+                      </div>
+                      {expandedGeriatric === i ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                    </div>
+                    {expandedGeriatric === i && (
+                      <p className="text-sm text-muted-foreground mt-2 ps-10 animate-in fade-in-50">
+                        {isAr ? tip.descAr : tip.descEn}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <WadAlHalalAvatar size={36} />
+                <p className="text-xs text-foreground">
+                  {isAr ? "💡 نصيحة ود الحلال: الاهتمام والرعاية بالمسنين واجب — الصبر والحنان أهم من أي دواء!" : "💡 Wad Al-Halal: Attention & Care for the elderly is a duty — patience and compassion matter more than any medicine!"}
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -295,7 +274,7 @@ const MassageCare = () => {
               <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
                 <WadAlHalalAvatar size={36} />
                 <p className="text-xs text-foreground">
-                  {isAr ? "💡 نصيحة ود الحلال: نقع القدمين يحسن الدورة الدموية ويخفف التورم — مثالي بعد مناوبة طويلة!" : "💡 Wad Al-Halal: Foot soaking improves circulation and reduces swelling — perfect after a long shift!"}
+                  {isAr ? "💡 نصيحة ود الحلال: في قسم الاهتمام والرعاية — نقع القدمين يحسن الدورة الدموية ويخفف التورم — مثالي بعد مناوبة طويلة!" : "💡 Wad Al-Halal: In Attention & Care — Foot soaking improves circulation and reduces swelling — perfect after a long shift!"}
                 </p>
               </div>
             </CardContent>
