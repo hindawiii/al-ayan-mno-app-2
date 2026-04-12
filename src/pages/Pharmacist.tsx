@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Pill, Search, AlertTriangle, ShieldAlert, ShieldCheck, X, Bot, Sparkles,
   Calculator, BookOpen, Activity, Weight, Droplets, Baby, ChevronRight,
-  Camera, ScanBarcode, Check, Edit, Loader2
+  Camera, ScanBarcode, Check, Edit, Loader2, CloudUpload
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,11 +70,13 @@ const Pharmacist = () => {
   const [showOCR, setShowOCR] = useState(false);
   const [ocrScanning, setOcrScanning] = useState(false);
   const [ocrResults, setOcrResults] = useState<{ name: string; confidence: number; matched?: typeof SUDAN_DRUGS[0] }[]>([]);
+  const [ocrDragOver, setOcrDragOver] = useState(false);
 
   // Barcode Scanner
   const [showBarcode, setShowBarcode] = useState(false);
   const [barcodeScanning, setBarcodeScanning] = useState(false);
   const [barcodeResult, setBarcodeResult] = useState<typeof SUDAN_DRUGS[0] | null>(null);
+  const [barcodeDragOver, setBarcodeDragOver] = useState(false);
 
   const simulateOCR = () => {
     setOcrScanning(true);
@@ -99,6 +101,30 @@ const Pharmacist = () => {
     }, 2000);
   };
 
+  const isValidImage = (file: File) => ["image/jpeg", "image/png", "image/webp"].includes(file.type);
+
+  const handleDrop = useCallback((e: DragEvent<HTMLDivElement>, type: "ocr" | "barcode") => {
+    e.preventDefault();
+    if (type === "ocr") setOcrDragOver(false);
+    else setBarcodeDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && isValidImage(file)) {
+      if (type === "ocr") simulateOCR();
+      else simulateBarcode();
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  }, []);
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>, type: "ocr" | "barcode") => {
+    const file = e.target.files?.[0];
+    if (file && isValidImage(file)) {
+      if (type === "ocr") simulateOCR();
+      else simulateBarcode();
+    }
+  };
   const filteredDrugs = useMemo(() => {
     if (!searchQuery.trim()) return SUDAN_DRUGS;
     const q = searchQuery.toLowerCase();
@@ -458,17 +484,51 @@ const Pharmacist = () => {
                 {isAr ? "التقط صورة للروشتة وسيتعرف النظام على أسماء الأدوية تلقائياً" : "Capture a prescription image and the system will recognize drug names automatically"}
               </p>
 
-              {/* Camera preview placeholder */}
-              <div className="relative aspect-[4/3] bg-muted rounded-xl border-2 border-dashed border-primary/30 flex flex-col items-center justify-center gap-3 overflow-hidden">
-                <div className="absolute inset-6 border-2 border-primary/40 rounded-lg" />
-                <Camera className="h-12 w-12 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">{isAr ? "منطقة المسح" : "Scan Area"}</p>
+              {/* Drop Zone */}
+              <div
+                onDrop={(e) => handleDrop(e, "ocr")}
+                onDragOver={handleDragOver}
+                onDragEnter={() => setOcrDragOver(true)}
+                onDragLeave={() => setOcrDragOver(false)}
+                onClick={() => document.getElementById("ocr-file-input")?.click()}
+                className={`relative aspect-[4/3] rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-300 ${
+                  ocrDragOver
+                    ? "border-primary bg-primary/15 scale-[1.02]"
+                    : "border-primary/30 bg-muted hover:border-primary/50 hover:bg-primary/5"
+                }`}
+              >
+                <input
+                  id="ocr-file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => handleFileInput(e, "ocr")}
+                />
+                <CloudUpload className={`h-12 w-12 transition-colors duration-300 ${ocrDragOver ? "text-primary" : "text-muted-foreground"}`} />
+                <p className="text-sm text-center px-4 font-medium" style={{ fontFamily: "'Cairo', sans-serif" }}>
+                  {isAr ? "اسحب صورة الروشتة هنا أو اضغط للرفع" : "Drag prescription image here or click to upload"}
+                </p>
+                <p className="text-xs text-muted-foreground">JPG, PNG, WEBP</p>
               </div>
 
-              <Button onClick={simulateOCR} disabled={ocrScanning} className="w-full gap-2">
-                {ocrScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-                {ocrScanning ? (isAr ? "جاري التحليل..." : "Analyzing...") : (isAr ? "افحص الروشتة" : "Scan Prescription")}
-              </Button>
+              {/* Wad Al-Halal tip */}
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <WadAlHalalAvatar size={36} />
+                <p className="text-xs text-foreground" style={{ fontFamily: "'Cairo', sans-serif" }}>
+                  {isAr ? "💡 يا دكتور، ارمي صورة الروشتة هنا وبنطلع ليك النتيجة في ثواني!" : "💡 Doctor, drop the prescription image here and we'll get you results in seconds!"}
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button onClick={simulateOCR} disabled={ocrScanning} className="flex-1 gap-2">
+                  {ocrScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                  {ocrScanning ? (isAr ? "جاري التحليل..." : "Analyzing...") : (isAr ? "افحص الروشتة" : "Scan Prescription")}
+                </Button>
+                <Button variant="outline" onClick={() => document.getElementById("ocr-file-input")?.click()} className="gap-2">
+                  <CloudUpload className="h-4 w-4" />
+                  {isAr ? "رفع ملف" : "Upload"}
+                </Button>
+              </div>
 
               {ocrScanning && <Progress value={65} className="h-2" />}
 
@@ -512,16 +572,51 @@ const Pharmacist = () => {
                 {isAr ? "امسح باركود علبة الدواء لعرض التفاصيل فوراً" : "Scan the drug package barcode to instantly view details"}
               </p>
 
-              <div className="relative aspect-video bg-muted rounded-xl border-2 border-dashed border-primary/30 flex flex-col items-center justify-center gap-3">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-px bg-destructive animate-pulse" />
-                <ScanBarcode className="h-12 w-12 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">{isAr ? "وجّه الكاميرا نحو الباركود" : "Point camera at barcode"}</p>
+              {/* Drop Zone */}
+              <div
+                onDrop={(e) => handleDrop(e, "barcode")}
+                onDragOver={handleDragOver}
+                onDragEnter={() => setBarcodeDragOver(true)}
+                onDragLeave={() => setBarcodeDragOver(false)}
+                onClick={() => document.getElementById("barcode-file-input")?.click()}
+                className={`relative aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-300 ${
+                  barcodeDragOver
+                    ? "border-primary bg-primary/15 scale-[1.02]"
+                    : "border-primary/30 bg-muted hover:border-primary/50 hover:bg-primary/5"
+                }`}
+              >
+                <input
+                  id="barcode-file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => handleFileInput(e, "barcode")}
+                />
+                <CloudUpload className={`h-12 w-12 transition-colors duration-300 ${barcodeDragOver ? "text-primary" : "text-muted-foreground"}`} />
+                <p className="text-sm text-center px-4 font-medium" style={{ fontFamily: "'Cairo', sans-serif" }}>
+                  {isAr ? "اسحب صورة الباركود هنا أو اضغط للرفع" : "Drag barcode image here or click to upload"}
+                </p>
+                <p className="text-xs text-muted-foreground">JPG, PNG, WEBP</p>
               </div>
 
-              <Button onClick={simulateBarcode} disabled={barcodeScanning} className="w-full gap-2">
-                {barcodeScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanBarcode className="h-4 w-4" />}
-                {barcodeScanning ? (isAr ? "جاري المسح..." : "Scanning...") : (isAr ? "مسح الباركود" : "Scan Barcode")}
-              </Button>
+              {/* Wad Al-Halal tip */}
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+                <WadAlHalalAvatar size={36} />
+                <p className="text-xs text-foreground" style={{ fontFamily: "'Cairo', sans-serif" }}>
+                  {isAr ? "💡 يا دكتور، ارمي صورة الباركود هنا وبنطلع ليك النتيجة في ثواني!" : "💡 Doctor, drop the barcode image here and we'll get you results in seconds!"}
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button onClick={simulateBarcode} disabled={barcodeScanning} className="flex-1 gap-2">
+                  {barcodeScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanBarcode className="h-4 w-4" />}
+                  {barcodeScanning ? (isAr ? "جاري المسح..." : "Scanning...") : (isAr ? "مسح الباركود" : "Scan Barcode")}
+                </Button>
+                <Button variant="outline" onClick={() => document.getElementById("barcode-file-input")?.click()} className="gap-2">
+                  <CloudUpload className="h-4 w-4" />
+                  {isAr ? "رفع ملف" : "Upload"}
+                </Button>
+              </div>
 
               {barcodeScanning && <Progress value={50} className="h-2" />}
 
