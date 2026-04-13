@@ -311,6 +311,40 @@ const Community = () => {
       </div>
 
       <div className="px-4 pt-4">
+        {/* ═══════════════ QUICK POST INPUT ═══════════════ */}
+        <QuickPostInput
+          activeRoom={activeRoom}
+          isAr={isAr}
+          onSubmitDiary={(text) => {
+            const post: DiaryPost = {
+              id: `d${Date.now()}`,
+              author: "أنت",
+              verified: false,
+              content: text,
+              time: "الآن",
+              likes: 0,
+              liked: false,
+              comments: [],
+              isStory: true,
+            };
+            setDiaryPosts((prev) => [post, ...prev]);
+          }}
+          onSubmitConsult={(data) => {
+            const post: ConsultationPost = {
+              id: `c${Date.now()}`,
+              author: "أنت",
+              age: parseInt(data.age) || 0,
+              gender: data.gender,
+              symptoms: data.symptoms,
+              duration: data.duration,
+              urgent: data.urgent,
+              solved: false,
+              responses: [],
+            };
+            setConsultPosts((prev) => [post, ...prev]);
+          }}
+        />
+
         {/* ═══════════════ DIARY ROOM ═══════════════ */}
         {activeRoom === "diary" && (
           <div className="space-y-5 animate-fade-in">
