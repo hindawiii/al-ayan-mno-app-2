@@ -183,7 +183,7 @@ const QuickPostInput = ({
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState("");
   const [consultData, setConsultData] = useState({ age: "", gender: "ذكر", symptoms: "", duration: "", urgent: false });
-  const fileInputRef = useState<HTMLInputElement | null>(null);
+  
 
   const placeholder =
     activeRoom === "diary"
