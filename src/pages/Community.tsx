@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MessageCircle,
@@ -29,6 +29,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  serverTimestamp,
+  updateDoc,
+  doc,
+  Timestamp,
+} from "firebase/firestore";
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface DiaryPost {
@@ -55,84 +67,17 @@ interface ConsultationPost {
   responses: { author: string; text: string; isDoctor: boolean }[];
 }
 
-// ─── Mock Data ───────────────────────────────────────────────────────
-const MOCK_DIARY: DiaryPost[] = [
-  {
-    id: "d1",
-    author: "أحمد محمد",
-    verified: true,
-    content: "اليوم كانت وردية صعبة في الطوارئ، لكن الحمد لله كل المرضى استقروا. التمريض رسالة قبل ما يكون مهنة! 💪",
-    time: "منذ ساعتين",
-    likes: 12,
-    liked: false,
-    comments: [{ author: "سارة علي", text: "ما شاء الله عليك يا بطل!" }],
-    isStory: true,
-  },
-  {
-    id: "d2",
-    author: "فاطمة عبدالله",
-    verified: true,
-    content: "نصيحة للزملاء: لا تنسوا تاخدوا بريك كل 4 ساعات. صحتكم أولاً عشان تقدروا تخدموا المرضى.",
-    time: "منذ 5 ساعات",
-    likes: 8,
-    liked: false,
-    comments: [],
-    isStory: false,
-  },
-  {
-    id: "d3",
-    author: "خالد عثمان",
-    verified: false,
-    content: "أول يوم ليّ في قسم العناية المركزة. التجربة مختلفة تماماً عن الأقسام العادية!",
-    time: "منذ يوم",
-    likes: 15,
-    liked: false,
-    comments: [{ author: "أحمد محمد", text: "بالتوفيق! العناية المركزة بتعلمك كتير." }],
-    isStory: true,
-  },
-];
-
-const MOCK_CONSULTS: ConsultationPost[] = [
-  {
-    id: "c1",
-    author: "محمد إبراهيم",
-    age: 45,
-    gender: "ذكر",
-    symptoms: "صداع شديد مع دوخة وزغللة في العينين",
-    duration: "3 أيام",
-    urgent: true,
-    solved: false,
-    responses: [
-      {
-        author: "د. سلمى أحمد",
-        text: "يجب قياس ضغط الدم فوراً والتوجه للطوارئ إذا كان مرتفعاً. هذه الأعراض قد تشير لارتفاع حاد في الضغط.",
-        isDoctor: true,
-      },
-    ],
-  },
-  {
-    id: "c2",
-    author: "هالة عمر",
-    age: 30,
-    gender: "أنثى",
-    symptoms: "ألم في أسفل الظهر مع تنميل في الساق اليسرى",
-    duration: "أسبوع",
-    urgent: false,
-    solved: true,
-    responses: [
-      {
-        author: "د. كمال حسن",
-        text: "الأعراض تشير لانزلاق غضروفي. أنصح بعمل رنين مغناطيسي وتجنب الجلوس الطويل.",
-        isDoctor: true,
-      },
-      {
-        author: "نورا سعيد",
-        text: "حصل معاي نفس الشي، الرنين بيوضح كل شي.",
-        isDoctor: false,
-      },
-    ],
-  },
-];
+// ─── Helper: format Firestore timestamp ──────────────────────────────
+function formatTime(ts: Timestamp | null): string {
+  if (!ts) return "الآن";
+  const diff = Date.now() - ts.toMillis();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "الآن";
+  if (mins < 60) return `منذ ${mins} دقيقة`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `منذ ${hours} ساعة`;
+  return `منذ ${Math.floor(hours / 24)} يوم`;
+}
 
 // ─── Shift Story Card ────────────────────────────────────────────────
 const StoryCard = ({
@@ -183,7 +128,6 @@ const QuickPostInput = ({
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState("");
   const [consultData, setConsultData] = useState({ age: "", gender: "ذكر", symptoms: "", duration: "", urgent: false });
-  
 
   const placeholder =
     activeRoom === "diary"
@@ -306,8 +250,8 @@ const Community = () => {
   const isAr = i18n.language === "ar";
 
   const [activeRoom, setActiveRoom] = useState<"diary" | "consultation">("diary");
-  const [diaryPosts, setDiaryPosts] = useState<DiaryPost[]>(MOCK_DIARY);
-  const [consultPosts, setConsultPosts] = useState<ConsultationPost[]>(MOCK_CONSULTS);
+  const [diaryPosts, setDiaryPosts] = useState<DiaryPost[]>([]);
+  const [consultPosts, setConsultPosts] = useState<ConsultationPost[]>([]);
 
   // Diary state
   const [showNewDiary, setShowNewDiary] = useState(false);
@@ -321,51 +265,102 @@ const Community = () => {
   const [expandedConsultComments, setExpandedConsultComments] = useState<string | null>(null);
   const [consultReplyText, setConsultReplyText] = useState("");
 
-  const handleLike = useCallback((id: string) => {
+  // ─── Firestore real-time listeners ─────────────────────────────────
+  useEffect(() => {
+    const postsRef = collection(db, "posts");
+    const q = query(postsRef, orderBy("createdAt", "desc"));
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      const diary: DiaryPost[] = [];
+      const consults: ConsultationPost[] = [];
+
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.type === "consultation") {
+          consults.push({
+            id: docSnap.id,
+            author: data.author || "مجهول",
+            age: data.age || 0,
+            gender: data.gender || "ذكر",
+            symptoms: data.symptoms || "",
+            duration: data.duration || "",
+            urgent: data.urgent || false,
+            solved: data.solved || false,
+            responses: data.responses || [],
+          });
+        } else {
+          diary.push({
+            id: docSnap.id,
+            author: data.author || "مجهول",
+            verified: data.verified || false,
+            content: data.content || "",
+            time: formatTime(data.createdAt as Timestamp | null),
+            likes: data.likes || 0,
+            liked: false,
+            comments: data.comments || [],
+            isStory: data.isStory ?? true,
+          });
+        }
+      });
+
+      setDiaryPosts(diary);
+      setConsultPosts(consults);
+    });
+
+    return () => unsub();
+  }, []);
+
+  // ─── Firestore write helpers ───────────────────────────────────────
+  const handleLike = useCallback(async (id: string) => {
+    // Optimistic local update
     setDiaryPosts((prev) =>
       prev.map((p) =>
         p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p
       )
     );
-  }, []);
+    // Persist to Firestore
+    const post = diaryPosts.find((p) => p.id === id);
+    if (post) {
+      const ref = doc(db, "posts", id);
+      await updateDoc(ref, { likes: post.liked ? post.likes - 1 : post.likes + 1 });
+    }
+  }, [diaryPosts]);
 
-  const handleNewDiary = useCallback(() => {
+  const handleNewDiary = useCallback(async () => {
     if (!newDiaryText.trim()) return;
-    const post: DiaryPost = {
-      id: `d${Date.now()}`,
+    await addDoc(collection(db, "posts"), {
+      type: "diary",
       author: "أنت",
       verified: false,
       content: newDiaryText,
-      time: "الآن",
       likes: 0,
-      liked: false,
       comments: [],
       isStory: true,
-    };
-    setDiaryPosts((prev) => [post, ...prev]);
+      createdAt: serverTimestamp(),
+    });
     setNewDiaryText("");
     setShowNewDiary(false);
   }, [newDiaryText]);
 
   const handleAddComment = useCallback(
-    (postId: string) => {
+    async (postId: string) => {
       if (!commentText.trim()) return;
-      setDiaryPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? { ...p, comments: [...p.comments, { author: "أنت", text: commentText }] }
-            : p
-        )
-      );
+      const post = diaryPosts.find((p) => p.id === postId);
+      if (post) {
+        const ref = doc(db, "posts", postId);
+        await updateDoc(ref, {
+          comments: [...post.comments, { author: "أنت", text: commentText }],
+        });
+      }
       setCommentText("");
     },
-    [commentText]
+    [commentText, diaryPosts]
   );
 
-  const handleNewConsult = useCallback(() => {
+  const handleNewConsult = useCallback(async () => {
     if (!consultForm.symptoms.trim()) return;
-    const post: ConsultationPost = {
-      id: `c${Date.now()}`,
+    await addDoc(collection(db, "posts"), {
+      type: "consultation",
       author: "أنت",
       age: parseInt(consultForm.age) || 0,
       gender: consultForm.gender,
@@ -374,34 +369,65 @@ const Community = () => {
       urgent: consultForm.urgent,
       solved: false,
       responses: [],
-    };
-    setConsultPosts((prev) => [post, ...prev]);
+      createdAt: serverTimestamp(),
+    });
     setConsultForm({ age: "", gender: "ذكر", symptoms: "", duration: "", urgent: false });
     setShowNewConsult(false);
   }, [consultForm]);
 
-  const handleToggleSolved = useCallback((id: string) => {
-    setConsultPosts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, solved: !p.solved } : p))
-    );
-  }, []);
+  const handleToggleSolved = useCallback(async (id: string) => {
+    const post = consultPosts.find((p) => p.id === id);
+    if (post) {
+      const ref = doc(db, "posts", id);
+      await updateDoc(ref, { solved: !post.solved });
+    }
+  }, [consultPosts]);
 
   const handleConsultReply = useCallback(
-    (postId: string) => {
+    async (postId: string) => {
       if (!consultReplyText.trim()) return;
-      setConsultPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? { ...p, responses: [...p.responses, { author: "أنت", text: consultReplyText, isDoctor: false }] }
-            : p
-        )
-      );
+      const post = consultPosts.find((p) => p.id === postId);
+      if (post) {
+        const ref = doc(db, "posts", postId);
+        await updateDoc(ref, {
+          responses: [...post.responses, { author: "أنت", text: consultReplyText, isDoctor: false }],
+        });
+      }
       setConsultReplyText("");
     },
-    [consultReplyText]
+    [consultReplyText, consultPosts]
   );
 
   const stories = diaryPosts.filter((p) => p.isStory);
+
+  // ─── Quick post submit handlers (write to Firestore) ───────────────
+  const handleQuickDiary = useCallback(async (text: string) => {
+    await addDoc(collection(db, "posts"), {
+      type: "diary",
+      author: "أنت",
+      verified: false,
+      content: text,
+      likes: 0,
+      comments: [],
+      isStory: true,
+      createdAt: serverTimestamp(),
+    });
+  }, []);
+
+  const handleQuickConsult = useCallback(async (data: { age: string; gender: string; symptoms: string; duration: string; urgent: boolean }) => {
+    await addDoc(collection(db, "posts"), {
+      type: "consultation",
+      author: "أنت",
+      age: parseInt(data.age) || 0,
+      gender: data.gender,
+      symptoms: data.symptoms,
+      duration: data.duration,
+      urgent: data.urgent,
+      solved: false,
+      responses: [],
+      createdAt: serverTimestamp(),
+    });
+  }, []);
 
   return (
     <div className="min-h-screen pb-24" style={{ fontFamily: "'Cairo', sans-serif" }}>
@@ -447,34 +473,8 @@ const Community = () => {
         <QuickPostInput
           activeRoom={activeRoom}
           isAr={isAr}
-          onSubmitDiary={(text) => {
-            const post: DiaryPost = {
-              id: `d${Date.now()}`,
-              author: "أنت",
-              verified: false,
-              content: text,
-              time: "الآن",
-              likes: 0,
-              liked: false,
-              comments: [],
-              isStory: true,
-            };
-            setDiaryPosts((prev) => [post, ...prev]);
-          }}
-          onSubmitConsult={(data) => {
-            const post: ConsultationPost = {
-              id: `c${Date.now()}`,
-              author: "أنت",
-              age: parseInt(data.age) || 0,
-              gender: data.gender,
-              symptoms: data.symptoms,
-              duration: data.duration,
-              urgent: data.urgent,
-              solved: false,
-              responses: [],
-            };
-            setConsultPosts((prev) => [post, ...prev]);
-          }}
+          onSubmitDiary={handleQuickDiary}
+          onSubmitConsult={handleQuickConsult}
         />
 
         {/* ═══════════════ DIARY ROOM ═══════════════ */}
